@@ -1,0 +1,368 @@
+---
+title: Grouping Extension
+---
+
+<div id="enable-section-numbers" />
+
+<Info>**Protocol Revision**: draft</Info>
+
+## Introduction
+
+### Purpose and Scope
+
+This extension defines the Grouping capability for the Model Context Protocol, enabling servers to organize tools, prompts, resources, tasks, and other groups into named collections. Groups allow clients to provide richer workflows such as filtering, agentic control, and simplified server instructions.
+
+This specification covers:
+
+- The `Group` type definition
+- Discovery via the `groups/list` method
+- Membership signaling via the reserved `_meta` key `io.modelcontextprotocol/groups`
+- Notifications for group list and membership changes
+- Nested group semantics
+
+### Extension Identifier
+
+The canonical extension identifier is:
+
+```
+io.modelcontextprotocol/grouping
+```
+
+### Extension Requirements
+
+This extension is **OPTIONAL** for MCP implementations. When adopted:
+
+- Implementations **MUST** conform to all requirements specified in this extension
+- Implementations **MUST** also conform to the core MCP specification
+- This extension works with all MCP transports
+
+## Capability Negotiation
+
+### Server Declaration
+
+Servers that support groups **MUST** declare support during initialization using the `extensions` field in `ServerCapabilities`:
+
+```json
+{
+  "capabilities": {
+    "extensions": {
+      "io.modelcontextprotocol/grouping": {
+        "listChanged": true
+      }
+    }
+  }
+}
+```
+
+The `listChanged` field indicates whether the server supports `notifications/groups/list_changed` notifications. Servers that omit this field or set it to `false` do not send list change notifications.
+
+### Client Handling
+
+Clients **SHOULD** check for the `io.modelcontextprotocol/grouping` key in `capabilities.extensions` before issuing `groups/list` requests. Clients that do not recognize the extension **MUST** ignore it — the extension does not alter any core protocol behavior.
+
+## Group Schema
+
+A `Group` represents a named collection of MCP primitives.
+
+### Type Definition
+
+```typescript
+interface Group {
+  /**
+   * A unique identifier for the group. Intended for programmatic or logical
+   * use, but used as a display name as fallback if title is not present.
+   */
+  name: string;
+
+  /**
+   * Intended for UI and end-user contexts — optimized to be human-readable
+   * and easily understood. If not provided, clients should use name for display.
+   */
+  title?: string;
+
+  /**
+   * A human-readable description of the group.
+   */
+  description?: string;
+
+  /**
+   * Optional set of sized icons that the client can display in a user interface.
+   *
+   * Clients that support rendering icons MUST support at least:
+   * - image/png — PNG images
+   * - image/jpeg (and image/jpg) — JPEG images
+   *
+   * Clients that support rendering icons SHOULD also support:
+   * - image/svg+xml — SVG images (requires security precautions)
+   * - image/webp — WebP images
+   */
+  icons?: Icon[];
+
+  /**
+   * Optional annotations providing additional group information.
+   *
+   * Display name precedence order is: title, annotations.title, then name.
+   */
+  annotations?: Annotations;
+
+  /**
+   * Optional metadata. May include the reserved key
+   * "io.modelcontextprotocol/groups" to indicate nested group membership.
+   */
+  _meta?: Record<string, unknown>;
+}
+```
+
+### Example: Basic Group
+
+```json
+{
+  "name": "user-management",
+  "title": "User Management Tools",
+  "description": "Tools used for managing user accounts within the system."
+}
+```
+
+### Example: Group with Icons and Nested Membership
+
+```json
+{
+  "name": "email",
+  "title": "Email Tools",
+  "description": "Tools for composing and sending emails.",
+  "icons": [
+    {
+      "src": "https://example.com/email-icon.png",
+      "mimeType": "image/png",
+      "sizes": ["48x48"]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol/groups": ["productivity"]
+  }
+}
+```
+
+## Discovery
+
+### `groups/list` Request
+
+Clients discover available groups via the `groups/list` method. This method supports cursor-based pagination following the same pattern as other MCP list methods.
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "groups/list"
+}
+```
+
+With optional cursor for pagination:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "groups/list",
+  "params": {
+    "cursor": "next-page-cursor"
+  }
+}
+```
+
+### `groups/list` Response
+
+The response contains an array of `Group` objects and an optional `nextCursor` for pagination:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "groups": [
+      {
+        "name": "user-management",
+        "title": "User Management Tools",
+        "description": "Tools used for managing user accounts."
+      },
+      {
+        "name": "mapping",
+        "title": "Geospatial Mapping Tools",
+        "description": "Tools for map rendering and spatial analysis."
+      }
+    ],
+    "nextCursor": "next-page-cursor"
+  }
+}
+```
+
+### Type Definitions
+
+```typescript
+interface ListGroupsRequest {
+  method: "groups/list";
+  params?: {
+    cursor?: string;
+    _meta?: Record<string, unknown>;
+  };
+}
+
+interface ListGroupsResult {
+  groups: Group[];
+  nextCursor?: string;
+  _meta?: Record<string, unknown>;
+}
+```
+
+## Membership
+
+### Reserved `_meta` Key
+
+Group membership for all primitives (tools, resources, resource templates, prompts, tasks, and groups themselves) is expressed via a reserved `_meta` key:
+
+```
+io.modelcontextprotocol/groups
+```
+
+The value is an array of group `name` strings identifying which groups a primitive belongs to.
+
+### Example: Tool with Group Membership
+
+A tool listed in the `tools/list` response indicating membership in the `arithmetic` group:
+
+```json
+{
+  "name": "calculator",
+  "title": "Arithmetic Calculator",
+  "description": "Perform mathematical calculations on arithmetic expressions",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "Expression to evaluate (e.g., '2 + 3 * 4')"
+      }
+    },
+    "required": ["expression"]
+  },
+  "_meta": {
+    "io.modelcontextprotocol/groups": ["arithmetic"]
+  }
+}
+```
+
+### Membership Constraints
+
+1. Primitives **MAY** belong to multiple groups. For example, a `spell_check` tool might appear in both `compose_email` and `compose_document` groups.
+2. Primitives **MAY** belong to zero groups. The `io.modelcontextprotocol/groups` key is optional; its absence means the primitive is ungrouped.
+3. Clients **MUST** treat group names as opaque identifiers and resolve them against the `groups/list` result.
+
+### Backward Compatibility
+
+By using a `_meta` key for membership, this extension ensures backward compatibility. Older clients that do not recognize the `io.modelcontextprotocol/groups` key will simply ignore it — the core primitive data remains unchanged.
+
+## Notifications
+
+### Group List Changed
+
+When the list of available groups changes, servers that declared `listChanged: true` in the capability **SHOULD** send:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/groups/list_changed"
+}
+```
+
+Upon receiving this notification, clients **SHOULD** re-issue a `groups/list` request to get the updated list.
+
+### Membership Changed
+
+If a primitive is added to or removed from a group, the server **SHOULD** send the appropriate list changed notification for that primitive type. For example:
+
+- If a tool's group membership changes → `notifications/tools/list_changed`
+- If a resource's group membership changes → `notifications/resources/list_changed`
+- If a group's group membership changes → `notifications/groups/list_changed`
+
+This reuses existing MCP notification mechanisms and requires no new notification types for membership changes.
+
+### Type Definition
+
+```typescript
+interface GroupListChangedNotification {
+  method: "notifications/groups/list_changed";
+  params?: Record<string, unknown>;
+}
+```
+
+## Nested Groups
+
+### Groups Belonging to Groups
+
+Groups **MAY** belong to other groups using the same `_meta` key mechanism. This enables organizing groups into larger categories without introducing a separate hierarchy mechanism.
+
+### Example
+
+A server provides three groups: `email`, `calendar`, and `productivity`. The `email` and `calendar` groups belong to `productivity`:
+
+```json
+[
+  {
+    "name": "productivity",
+    "title": "Productivity Suite",
+    "description": "All productivity-related tools."
+  },
+  {
+    "name": "email",
+    "title": "Email Tools",
+    "description": "Tools for composing and sending emails.",
+    "_meta": {
+      "io.modelcontextprotocol/groups": ["productivity"]
+    }
+  },
+  {
+    "name": "calendar",
+    "title": "Calendar Tools",
+    "description": "Tools for scheduling and calendar management.",
+    "_meta": {
+      "io.modelcontextprotocol/groups": ["productivity"]
+    }
+  }
+]
+```
+
+### Transitivity
+
+Clients **MAY** interpret transitive relationships based on their specific use cases. For example, a client might show all tools in `email` and `calendar` when the user selects the `productivity` group. Other clients might show only direct members.
+
+This specification does not mandate a particular traversal strategy — clients are free to choose the behavior that best fits their UX.
+
+### Constraints
+
+- Servers **MUST NOT** create self-referential groups (a group belonging to itself).
+- Servers **MUST NOT** create cyclic membership (e.g., group A belongs to group B, and group B belongs to group A).
+- Servers are responsible for ensuring valid group structures. SDKs **MAY** provide validation helpers.
+
+## Graceful Degradation
+
+### Server Without Extension
+
+If a server does not declare `io.modelcontextprotocol/grouping` in `capabilities.extensions`, clients **MUST NOT** send `groups/list` requests. Primitives returned by the server will not contain the `io.modelcontextprotocol/groups` `_meta` key.
+
+### Client Without Extension Support
+
+If a client does not support this extension, the server's group declarations are simply ignored. The `_meta` key on primitives is opaque metadata that non-supporting clients will skip. All core MCP functionality remains unaffected.
+
+### Partial Support
+
+A server **MAY** support groups for only a subset of its primitives. For example, a server might group its tools but not its resources. Clients **SHOULD** handle the case where some primitives in a `groups/list` result have no corresponding members.
+
+## Security Considerations
+
+This extension does not introduce new security implications beyond those already present in the core MCP specification. Specifically:
+
+- Group information exposed to LLMs presents challenges similar to other primitive metadata. Servers **SHOULD** avoid including sensitive information in group names, titles, or descriptions.
+- If servers use groups for access control purposes, the access control logic **MUST** be enforced server-side. Clients **MUST NOT** rely on group membership as a security boundary.
+- Groups do not grant any additional capabilities — they are purely organizational metadata.
