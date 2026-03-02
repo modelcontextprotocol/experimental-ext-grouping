@@ -32,6 +32,15 @@ Currently, even though some servers and gateways implement grouping, they do so 
 1. [SEP-2084: Primitive Groups](https://github.com/chughtapan/modelcontextprotocol/blob/e15be3979999a3fdf64a61681558358d4c8c958c/docs/community/seps/2084-primitive-groups.mdx): Rejected by [core maintainers](https://github.com/modelcontextprotocol/modelcontextprotocol/discussions/2204) to avoid locking into one approach too early
 2. [SEP-2084: Primitive Groups - Alternative drafts](https://docs.google.com/document/d/1e7CkEz_8HEC3EARIDZ8Zkl1s3i_u7Oe2cxS36FphEkA/edit?tab=t.0#heading=h.pumr9ld3el7i): Alternative specifications for primitive grouping discussed in #primitive-group-wg.
 3. [SEP-993: Namespaces](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/993): Inserts a namespace parameter prior to primitive list methods, e.g., `<namespace>/tools/list` as a method for grouping. Also rejected by core maintainers with less clear feedback.
+
+## Server Variants
+[Discussion](https://github.com/modelcontextprotocol/experimental-ext-grouping/discussions/8)
+
+Server variants allow MCP servers to expose multiple parallel configurations (e.g., `claude-optimized`, `compact`, `coding-assistant`) that clients can intelligently select based on their context. Each variant includes a unique identifier, human-readable description, and key-value hints.
+
+**References:**
+
+1. [SEP-2053: Server Variants](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2053)
 ## Tool Fusion (mcp-fusion)
 [Discussion](https://github.com/modelcontextprotocol/experimental-ext-grouping/discussions/3)
 
