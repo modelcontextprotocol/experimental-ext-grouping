@@ -1,5 +1,8 @@
 # Primitive Grouping Interest Group
 
+MCP Contributor Discord Channel: [#primitive-grouping-ig](https://discord.com/channels/1358869848138059966/1425903819186770064)
+More info on how to join the Discord server [here](https://modelcontextprotocol.io/community/communication#discord)
+
 > ⚠️ **Experimental** — This repository is an incubation space for the Primitive Grouping Interest Group. Contents are exploratory and do not represent official MCP specifications or recommendations.
 
 ## Mission
@@ -21,13 +24,36 @@ This Interest Group explores how MCP Primitives (Tools, Resources, Prompts, Task
 
 ## Problem Statement
 
-Flat lists of MCP primitives can be long and cumbersome to work with.  
+Flat lists of MCP primitives can be long and cumbersome to work with for several reasons. Many such problems are within the scope of this group, but some are not.
+
+**Within Scope**
 
 - **Context overload** — When loaded into the context of an LLM, a primitive list can overwhelm the model and lead to confusion and poor selection
-- **Costly operation** - Long lists can consume many tokens, leading to higher costs for users.
-- **Poor developer experience** — Lack of organizational tools for primitives makes them harder to manage and maintain
+- **Inefficient operations** — Long lists in the context consume many tokens which increases processing cost and response latency.
+- **Poor developer experience** — Lack of organizational tools for primitives makes them harder to manage and maintain.
+
+**Beyond Scope**
+
+- **Organization for Security** — Organizing and disclosing primitives to clients based on their privilege level is an important problem but beyond this group's mandate.
+- **Organizing MCP Servers** — MCP registry and MCP-and-Skills groups are evaluating how different servers should be organized to improve client experience.
 
 See the [Problem Statement](docs/problem-statement.md) for full details.
+
+## Goals
+
+1. **Documenting Requirements and Experiences** — The goal of this group is to document diverse requirements for different clients, servers, and gateways that implement these extensions. We will **not** try to find consensus early on, but aim to document the trade-offs based on feedback from real-world experience.
+2. **Reference Extensions** — While many possible organization mechanisms are emerging—and it might be too early to select "one" canonical pattern—different servers are implementing similar features, but the lack of standardization limits clients capability to leverage them effectively. This group will support reference extensions of varied organization strategies e.g., grouping, tool-search, code-mode.
+3. **Evangelizing Standards** — The group will invite feedback from developers and maintainers of large MCP servers and clients to migrate away from specific implementations towards standardized extensions.
+
+## Organization Strategies
+
+See [Approaches](docs/approaches.md) for detailed descriptions of each strategy, including prior art, examples, and discussion links.
+
+## IG Principles
+
+1. **Document Discussions**: The IG aims to document the trade-offs and discussions, rather than dictate one specific implementation. Prefer GitHub Discussions on the IG repository rather than prolonged Discord threads. Meeting notes from synchronous IG calls will also be uploaded on the GitHub Discussion for future documentation.
+2. **Experimental Extensions**: The repository will be useful to house experimental extensions for different approaches. Extensions SHOULD support at least Python and TypeScript implementations and include (1) end-to-end working demonstrations and (2) detailed instructions for how others can integrate with them.
+3. **Feedback From Deployments**: The IG will solicit deployment experiences and feedback from users of extensions to prioritize feature development and changes.
 
 ## Repository Contents
 
