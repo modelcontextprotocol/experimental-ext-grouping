@@ -1,14 +1,10 @@
-/**
- * Example MCP server using the Grouping extension.
- *
- * Registers a "productivity" group hierarchy (work + communications)
- * with tools and resources assigned to child groups.
- *
- * Run: npx tsx examples/server.ts
- */
-import { z } from 'zod/v4';
+// Run with:
+//   npx tsx examples/server.ts
+
+import type { CallToolResult, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod/v4';
 import { GroupingExtension, GROUPS_META_KEY } from '../src/index.js';
 
 const mcpServer = new McpServer({
@@ -18,279 +14,353 @@ const mcpServer = new McpServer({
 
 const grouping = new GroupingExtension(mcpServer);
 
-// Helper to create _meta with group membership
+/**
+ * Helper to attach a single group membership to a primitive.
+ *
+ * The groups proposal stores membership in `_meta[GROUPS_META_KEY]`.
+ * This same mechanism is used for:
+ * - tools/resources/prompts belonging to a group
+ * - child groups declaring which parent group(s) they are contained by
+ */
 function metaForGroup(groupName: string) {
-    return { _meta: { [GROUPS_META_KEY]: [groupName] } };
+    return {
+        _meta: {
+            [GROUPS_META_KEY]: [groupName]
+        }
+    };
 }
 
-// --- Parent groups ---
+// ---- Groups ------------------------------------------------------------------------------
+// This example defines two parent groups (`work`, `communications`) and five child groups.
+// Child groups declare containment by including the parent name in `_meta[GROUPS_META_KEY]`.
+
+// Parent groups (no `_meta` needed; they are roots in this example)
 grouping.registerGroup('work', {
-    title: 'Work Tools',
-    description: 'Tools for work-related tasks.'
+    title: 'Work',
+    description: 'Tools, resources, and prompts related to day-to-day work.'
 });
 
 grouping.registerGroup('communications', {
     title: 'Communications',
-    description: 'Tools for email and calendar.'
+    description: 'Tools, resources, and prompts related to messaging and scheduling.'
 });
 
-// --- Child groups (nested under parents) ---
+// Child groups (each one is "contained by" a parent group)
 grouping.registerGroup('spreadsheets', {
     title: 'Spreadsheets',
-    description: 'Spreadsheet management tools.',
-    ...metaForGroup('work')
+    description: 'Spreadsheet-like operations: create sheets, add rows, and do quick calculations.',
+    _meta: {
+        [GROUPS_META_KEY]: ['work']
+    }
 });
 
 grouping.registerGroup('documents', {
     title: 'Documents',
-    description: 'Document management tools.',
-    ...metaForGroup('work')
+    description: 'Document drafting, editing, and summarization workflows.',
+    _meta: {
+        [GROUPS_META_KEY]: ['work']
+    }
 });
 
 grouping.registerGroup('todos', {
     title: 'Todos',
-    description: 'Task and todo management.',
-    ...metaForGroup('work')
+    description: 'Task capture and lightweight task management.',
+    _meta: {
+        [GROUPS_META_KEY]: ['work']
+    }
 });
 
 grouping.registerGroup('email', {
     title: 'Email',
-    description: 'Email tools.',
-    ...metaForGroup('communications')
+    description: 'Email composition and inbox-oriented operations.',
+    _meta: {
+        [GROUPS_META_KEY]: ['communications']
+    }
 });
 
 grouping.registerGroup('calendar', {
     title: 'Calendar',
-    description: 'Calendar and scheduling tools.',
-    ...metaForGroup('communications')
+    description: 'Scheduling operations and event management.',
+    _meta: {
+        [GROUPS_META_KEY]: ['communications']
+    }
 });
 
-// --- Tools ---
+// ---- Tools -------------------------------------------------------------------------------
+// Tools are assigned to a group by including `_meta[GROUPS_META_KEY]`.
+// In this example they are simple stubs that return a confirmation string.
+
+// Email tools
 mcpServer.registerTool(
     'email_send',
     {
-        description: 'Send an email',
+        description: 'Send an email message.',
         inputSchema: {
-            to: z.string().describe('Recipient'),
-            subject: z.string().describe('Subject line'),
+            to: z.string().describe('Recipient email address'),
+            subject: z.string().describe('Email subject'),
             body: z.string().describe('Email body')
         },
         ...metaForGroup('email')
     },
-    async ({ to, subject }) => ({
-        content: [{ type: 'text' as const, text: `Email sent to ${to}: ${subject}` }]
-    })
+    async ({ to, subject }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Sent email to ${to} with subject "${subject}".` }] };
+    }
 );
 
 mcpServer.registerTool(
     'email_search_inbox',
     {
-        description: 'Search inbox for emails',
-        inputSchema: { query: z.string().describe('Search query') },
+        description: 'Search the inbox by query string.',
+        inputSchema: {
+            query: z.string().describe('Search query')
+        },
         ...metaForGroup('email')
     },
-    async ({ query }) => ({
-        content: [{ type: 'text' as const, text: `Search results for: ${query}` }]
-    })
+    async ({ query }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Searched inbox for "${query}".` }] };
+    }
 );
 
+// Calendar tools
 mcpServer.registerTool(
     'calendar_create_event',
     {
-        description: 'Create a calendar event',
+        description: 'Create a calendar event.',
         inputSchema: {
             title: z.string().describe('Event title'),
-            date: z.string().describe('Event date')
+            when: z.string().describe('When the event occurs (free-form, e.g. "tomorrow 2pm")')
         },
         ...metaForGroup('calendar')
     },
-    async ({ title, date }) => ({
-        content: [{ type: 'text' as const, text: `Event created: ${title} on ${date}` }]
-    })
+    async ({ title, when }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Created calendar event "${title}" at ${when}.` }] };
+    }
 );
 
 mcpServer.registerTool(
     'calendar_list_upcoming',
     {
-        description: 'List upcoming calendar events',
+        description: 'List upcoming calendar events (demo).',
+        inputSchema: {
+            days: z.number().describe('Number of days ahead to look').default(7)
+        },
         ...metaForGroup('calendar')
     },
-    async () => ({
-        content: [{ type: 'text' as const, text: 'Upcoming events: [none]' }]
-    })
+    async ({ days }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Listed upcoming calendar events for the next ${days} day(s).` }] };
+    }
 );
 
+// Spreadsheets tools
 mcpServer.registerTool(
     'spreadsheets_create',
     {
-        description: 'Create a new spreadsheet',
-        inputSchema: { name: z.string().describe('Spreadsheet name') },
+        description: 'Create a new spreadsheet.',
+        inputSchema: {
+            name: z.string().describe('Spreadsheet name')
+        },
         ...metaForGroup('spreadsheets')
     },
-    async ({ name }) => ({
-        content: [{ type: 'text' as const, text: `Created spreadsheet: ${name}` }]
-    })
+    async ({ name }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Created spreadsheet "${name}".` }] };
+    }
 );
 
 mcpServer.registerTool(
     'spreadsheets_add_row',
     {
-        description: 'Add a row to a spreadsheet',
+        description: 'Add a row to a spreadsheet.',
         inputSchema: {
-            sheetId: z.string().describe('Sheet ID'),
-            data: z.string().describe('Row data (JSON)')
+            spreadsheet: z.string().describe('Spreadsheet name'),
+            values: z.array(z.string()).describe('Row values')
         },
         ...metaForGroup('spreadsheets')
     },
-    async ({ sheetId }) => ({
-        content: [{ type: 'text' as const, text: `Row added to ${sheetId}` }]
-    })
+    async ({ spreadsheet, values }): Promise<CallToolResult> => {
+        return {
+            content: [{ type: 'text', text: `Added row to "${spreadsheet}": [${values.join(', ')}].` }]
+        };
+    }
 );
 
+// Documents tools
 mcpServer.registerTool(
     'documents_create',
     {
-        description: 'Create a new document',
-        inputSchema: { title: z.string().describe('Document title') },
+        description: 'Create a document draft.',
+        inputSchema: {
+            title: z.string().describe('Document title')
+        },
         ...metaForGroup('documents')
     },
-    async ({ title }) => ({
-        content: [{ type: 'text' as const, text: `Document created: ${title}` }]
-    })
+    async ({ title }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Created document "${title}".` }] };
+    }
 );
 
 mcpServer.registerTool(
     'documents_summarize',
     {
-        description: 'Summarize a document',
-        inputSchema: { docId: z.string().describe('Document ID') },
+        description: 'Summarize a document (demo).',
+        inputSchema: {
+            title: z.string().describe('Document title')
+        },
         ...metaForGroup('documents')
     },
-    async ({ docId }) => ({
-        content: [{ type: 'text' as const, text: `Summary of ${docId}: ...` }]
-    })
+    async ({ title }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Summarized document "${title}".` }] };
+    }
 );
 
+// Todos tools
 mcpServer.registerTool(
     'todos_add',
     {
-        description: 'Add a todo item',
-        inputSchema: { task: z.string().describe('Task description') },
+        description: 'Add a todo item.',
+        inputSchema: {
+            text: z.string().describe('Todo text')
+        },
         ...metaForGroup('todos')
     },
-    async ({ task }) => ({
-        content: [{ type: 'text' as const, text: `Todo added: ${task}` }]
-    })
+    async ({ text }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Added todo: "${text}".` }] };
+    }
 );
 
 mcpServer.registerTool(
     'todos_complete',
     {
-        description: 'Mark a todo as complete',
-        inputSchema: { todoId: z.string().describe('Todo ID') },
+        description: 'Mark a todo item complete.',
+        inputSchema: {
+            id: z.string().describe('Todo id')
+        },
         ...metaForGroup('todos')
     },
-    async ({ todoId }) => ({
-        content: [{ type: 'text' as const, text: `Completed: ${todoId}` }]
-    })
+    async ({ id }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: `Completed todo with id ${id}.` }] };
+    }
 );
 
-// --- Resources ---
+// ===== Resources =====
+
 mcpServer.registerResource(
     'calendar_overview',
-    'calendar://overview',
+    'groups://calendar/overview',
     {
-        description: 'Overview of upcoming calendar events',
+        mimeType: 'text/plain',
+        description: 'A short overview of calendar-related concepts and workflows.',
         ...metaForGroup('calendar')
     },
-    async () => ({
-        contents: [
-            {
-                uri: 'calendar://overview',
-                text: 'No upcoming events.',
-                mimeType: 'text/plain'
-            }
-        ]
-    })
+    async (): Promise<ReadResourceResult> => {
+        return {
+            contents: [
+                {
+                    uri: 'groups://calendar/overview',
+                    text:
+                        'Calendars help coordinate time. Common workflows include creating events, inviting attendees, setting reminders, and reviewing upcoming commitments.\n\n' +
+                        'Good scheduling habits include adding agendas, assigning owners, and keeping event titles descriptive so they are searchable.'
+                }
+            ]
+        };
+    }
 );
 
 mcpServer.registerResource(
     'email_overview',
-    'email://overview',
+    'groups://email/overview',
     {
-        description: 'Overview of recent emails',
+        mimeType: 'text/plain',
+        description: 'A short overview of email etiquette and structure.',
         ...metaForGroup('email')
     },
-    async () => ({
-        contents: [
-            {
-                uri: 'email://overview',
-                text: 'Inbox is empty.',
-                mimeType: 'text/plain'
-            }
-        ]
-    })
+    async (): Promise<ReadResourceResult> => {
+        return {
+            contents: [
+                {
+                    uri: 'groups://email/overview',
+                    text:
+                        'Email is best for asynchronous communication with a clear subject, concise context, and a specific call to action.\n\n' +
+                        'Strong emails include a brief greeting, the purpose in the first paragraph, and any needed links or bullet points.'
+                }
+            ]
+        };
+    }
 );
 
 mcpServer.registerResource(
     'spreadsheets_overview',
-    'spreadsheets://overview',
+    'groups://spreadsheets/overview',
     {
-        description: 'List of spreadsheets',
+        mimeType: 'text/plain',
+        description: 'A short overview of spreadsheet structure and best practices.',
         ...metaForGroup('spreadsheets')
     },
-    async () => ({
-        contents: [
-            {
-                uri: 'spreadsheets://overview',
-                text: 'No spreadsheets.',
-                mimeType: 'text/plain'
-            }
-        ]
-    })
+    async (): Promise<ReadResourceResult> => {
+        return {
+            contents: [
+                {
+                    uri: 'groups://spreadsheets/overview',
+                    text:
+                        'Spreadsheets organize data into rows and columns. Use consistent headers, keep one concept per column, and avoid mixing units in a single column.\n\n' +
+                        'For collaboration, document assumptions and prefer formulas over manual calculations.'
+                }
+            ]
+        };
+    }
 );
 
 mcpServer.registerResource(
     'documents_overview',
-    'documents://overview',
+    'groups://documents/overview',
     {
-        description: 'List of documents',
+        mimeType: 'text/plain',
+        description: 'A short overview of document workflows.',
         ...metaForGroup('documents')
     },
-    async () => ({
-        contents: [
-            {
-                uri: 'documents://overview',
-                text: 'No documents.',
-                mimeType: 'text/plain'
-            }
-        ]
-    })
+    async (): Promise<ReadResourceResult> => {
+        return {
+            contents: [
+                {
+                    uri: 'groups://documents/overview',
+                    text:
+                        'Documents capture long-form thinking. Common workflows include drafting, reviewing, suggesting edits, and summarizing key decisions.\n\n' +
+                        'Keep sections scannable with headings, and ensure decisions and next steps are easy to find.'
+                }
+            ]
+        };
+    }
 );
 
 mcpServer.registerResource(
     'todos_overview',
-    'todos://overview',
+    'groups://todos/overview',
     {
-        description: 'List of todo items',
+        mimeType: 'text/plain',
+        description: 'A short overview of task management basics.',
         ...metaForGroup('todos')
     },
-    async () => ({
-        contents: [
-            {
-                uri: 'todos://overview',
-                text: 'No todos.',
-                mimeType: 'text/plain'
-            }
-        ]
-    })
+    async (): Promise<ReadResourceResult> => {
+        return {
+            contents: [
+                {
+                    uri: 'groups://todos/overview',
+                    text:
+                        'Todo lists help track commitments. Capture tasks as verbs, keep them small, and regularly review to prevent backlog buildup.\n\n' +
+                        'If a task takes multiple steps, split it into subtasks or link it to a more detailed plan.'
+                }
+            ]
+        };
+    }
 );
+
+// TODO: add prompts once SDK registerPrompt supports _meta passthrough
 
 // --- Start server ---
 async function main() {
     const transport = new StdioServerTransport();
     await mcpServer.connect(transport);
-    console.error('Groups example server running on stdio');
+    // IMPORTANT: In stdio mode, avoid writing to stdout (it is used for MCP messages).
+    console.error('Groups example MCP server running on stdio.');
 }
 
-main().catch(console.error);
+await main();

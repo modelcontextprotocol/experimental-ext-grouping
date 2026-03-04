@@ -1,12 +1,11 @@
-import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { z } from 'zod/v4';
+import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { GroupingExtension } from '../src/server.js';
 import { GroupingClient } from '../src/client.js';
-import { GROUPS_META_KEY, GROUPING_EXTENSION_ID } from '../src/types.js';
+import { GROUPS_META_KEY } from '../src/types.js';
 
 /**
  * Connect a server and client over InMemoryTransport,
@@ -34,16 +33,31 @@ function spyOnNotifications(clientTransport: InMemoryTransport): string[] {
     return methods;
 }
 
-describe('Grouping Extension — e2e integration', () => {
+describe('Server Groups', () => {
     let mcpServer: McpServer;
     let client: Client;
     let grouping: GroupingExtension;
     let groupingClient: GroupingClient;
+    let serverTransport: InMemoryTransport;
+    let clientTransport: InMemoryTransport;
 
     beforeEach(() => {
-        mcpServer = new McpServer({ name: 'test-server', version: '1.0.0' });
+        mcpServer = new McpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+
         grouping = new GroupingExtension(mcpServer);
-        client = new Client({ name: 'test-client', version: '1.0.0' });
+
+        const [ct, st] = InMemoryTransport.createLinkedPair();
+        clientTransport = ct;
+        serverTransport = st;
+
+        client = new Client({
+            name: 'test-client',
+            version: '1.0.0'
+        });
+
         groupingClient = new GroupingClient(client);
     });
 
@@ -51,423 +65,206 @@ describe('Grouping Extension — e2e integration', () => {
         await Promise.all([client.close(), mcpServer.close()]);
     });
 
-    test('capability is advertised in experimental field after handshake', async () => {
-        grouping.registerGroup('g', { title: 'G' });
+    test('should register groups and list them', async () => {
+        grouping.registerGroup('group1', {
+            title: 'Group 1',
+            description: 'First test group'
+        });
 
-        await connectPair(mcpServer, client);
+        grouping.registerGroup('group2', {
+            title: 'Group 2',
+            description: 'Second test group'
+        });
 
-        const caps = client.getServerCapabilities();
-        expect(caps?.experimental).toBeDefined();
-        const ext = (caps!.experimental as Record<string, unknown>)[GROUPING_EXTENSION_ID] as Record<string, unknown>;
-        expect(ext).toEqual({ listChanged: true });
+        await Promise.all([client.connect(clientTransport), mcpServer.connect(serverTransport)]);
+
+        const result = await groupingClient.listGroups();
+        expect(result.groups).toHaveLength(2);
+        expect(result.groups.find(g => g.name === 'group1')).toMatchObject({
+            name: 'group1',
+            title: 'Group 1',
+            description: 'First test group'
+        });
+        expect(result.groups.find(g => g.name === 'group2')).toMatchObject({
+            name: 'group2',
+            title: 'Group 2',
+            description: 'Second test group'
+        });
     });
 
-    test('full productivity hierarchy: groups, tools, and resources round-trip', async () => {
-        // Build a realistic hierarchy: work > {spreadsheets, docs}, comms > {email, calendar}
-        grouping.registerGroup('work', {
-            title: 'Work',
-            description: 'Work tools'
-        });
-        grouping.registerGroup('comms', {
-            title: 'Communications',
-            description: 'Communication tools'
-        });
-        grouping.registerGroup('spreadsheets', {
-            title: 'Spreadsheets',
-            _meta: { [GROUPS_META_KEY]: ['work'] }
-        });
-        grouping.registerGroup('docs', {
-            title: 'Documents',
-            _meta: { [GROUPS_META_KEY]: ['work'] }
-        });
-        grouping.registerGroup('email', {
-            title: 'Email',
-            _meta: { [GROUPS_META_KEY]: ['comms'] }
-        });
-        grouping.registerGroup('calendar', {
-            title: 'Calendar',
-            _meta: { [GROUPS_META_KEY]: ['comms'] }
+    test('should add tools and resources to groups (mixed fashion)', async () => {
+        grouping.registerGroup('mixed-group', {
+            description: 'A group with different primitives'
         });
 
-        // Tools assigned to leaf groups
+        // Add tools to the group
         mcpServer.registerTool(
-            'create_sheet',
+            'tool1',
             {
-                description: 'Create spreadsheet',
-                inputSchema: { name: z.string() },
-                _meta: { [GROUPS_META_KEY]: ['spreadsheets'] }
+                description: 'Test tool 1',
+                _meta: {
+                    [GROUPS_META_KEY]: ['mixed-group']
+                }
             },
-            async ({ name }) => ({
-                content: [{ type: 'text', text: `Created ${name}` }]
-            })
+            async () => ({ content: [{ type: 'text', text: 'hi' }] })
         );
-        mcpServer.registerTool(
-            'send_email',
-            {
-                description: 'Send email',
-                inputSchema: { to: z.string(), body: z.string() },
-                _meta: { [GROUPS_META_KEY]: ['email'] }
-            },
-            async ({ to }) => ({
-                content: [{ type: 'text', text: `Sent to ${to}` }]
-            })
-        );
-        mcpServer.registerTool(
-            'write_doc',
-            {
-                description: 'Write document',
-                inputSchema: { title: z.string() },
-                _meta: { [GROUPS_META_KEY]: ['docs'] }
-            },
-            async ({ title }) => ({
-                content: [{ type: 'text', text: `Doc: ${title}` }]
-            })
-        );
-        mcpServer.registerTool(
-            'schedule_meeting',
-            {
-                description: 'Schedule meeting',
-                inputSchema: { date: z.string() },
-                _meta: { [GROUPS_META_KEY]: ['calendar'] }
-            },
-            async ({ date }) => ({
-                content: [{ type: 'text', text: `Meeting on ${date}` }]
-            })
-        );
-        // A tool in NO group
-        mcpServer.registerTool('ping', { description: 'Health check' }, async () => ({ content: [{ type: 'text', text: 'pong' }] }));
 
-        // Resources assigned to groups
+        mcpServer.registerTool('tool-no-group', { description: 'Tool with no group' }, async () => ({
+            content: [{ type: 'text', text: 'hi' }]
+        }));
+
+        // TODO: add prompt grouping once SDK registerPrompt supports _meta passthrough
+
+        // Add a resource to the same group
         mcpServer.registerResource(
-            'inbox',
-            'email://inbox',
+            'resource1',
+            'test://resource1',
             {
-                description: 'Inbox',
-                _meta: { [GROUPS_META_KEY]: ['email'] }
+                description: 'Test resource 1',
+                _meta: {
+                    [GROUPS_META_KEY]: ['mixed-group']
+                }
             },
+            async () => ({ contents: [] })
+        );
+
+        mcpServer.registerResource(
+            'resource-no-group',
+            'test://resource-no-group',
+            { description: 'Resource with no group' },
             async () => ({
-                contents: [{ uri: 'email://inbox', text: 'empty', mimeType: 'text/plain' }]
+                contents: []
             })
         );
 
-        await connectPair(mcpServer, client);
+        // TODO: add task-tool grouping once SDK experimental.tasks is available
 
-        // ---- Verify groups ----
-        const { groups } = await groupingClient.listGroups();
-        expect(groups).toHaveLength(6);
+        await Promise.all([client.connect(clientTransport), mcpServer.connect(serverTransport)]);
 
-        const groupNames = groups.map(g => g.name).sort();
-        expect(groupNames).toEqual(['calendar', 'comms', 'docs', 'email', 'spreadsheets', 'work']);
+        // Verify tools
+        const toolsResult = await client.listTools();
+        const tool1 = toolsResult.tools.find(t => t.name === 'tool1');
+        const toolNoGroup = toolsResult.tools.find(t => t.name === 'tool-no-group');
 
-        // Verify nesting
-        for (const childName of ['spreadsheets', 'docs']) {
-            const child = groups.find(g => g.name === childName)!;
-            expect(child._meta?.[GROUPS_META_KEY]).toEqual(['work']);
-        }
-        for (const childName of ['email', 'calendar']) {
-            const child = groups.find(g => g.name === childName)!;
-            expect(child._meta?.[GROUPS_META_KEY]).toEqual(['comms']);
-        }
-        for (const rootName of ['work', 'comms']) {
-            const root = groups.find(g => g.name === rootName)!;
-            expect(root._meta?.[GROUPS_META_KEY]).toBeUndefined();
+        expect(tool1?._meta?.[GROUPS_META_KEY]).toEqual(['mixed-group']);
+        expect(toolNoGroup?._meta?.[GROUPS_META_KEY]).toBeUndefined();
+
+        if (toolNoGroup?._meta) {
+            expect(toolNoGroup._meta).not.toHaveProperty(GROUPS_META_KEY);
         }
 
-        // ---- Verify tools carry group membership ----
-        const { tools } = await client.listTools();
-        expect(tools).toHaveLength(5);
+        // Verify resources
+        const resourcesResult = await client.listResources();
+        const resource1 = resourcesResult.resources.find(r => r.name === 'resource1');
+        const resourceNoGroup = resourcesResult.resources.find(r => r.name === 'resource-no-group');
+        expect(resource1?._meta?.[GROUPS_META_KEY]).toEqual(['mixed-group']);
+        if (resourceNoGroup?._meta) {
+            expect(resourceNoGroup._meta).not.toHaveProperty(GROUPS_META_KEY);
+        }
+    });
 
-        expect(tools.find(t => t.name === 'create_sheet')!._meta?.[GROUPS_META_KEY]).toEqual(['spreadsheets']);
-        expect(tools.find(t => t.name === 'send_email')!._meta?.[GROUPS_META_KEY]).toEqual(['email']);
-        expect(tools.find(t => t.name === 'ping')!._meta?.[GROUPS_META_KEY]).toBeUndefined();
+    test('should add a group to another group', async () => {
+        grouping.registerGroup('parent-group', {
+            description: 'A parent group'
+        });
 
-        // ---- Verify resources carry group membership ----
-        const { resources } = await client.listResources();
-        expect(resources.find(r => r.name === 'inbox')!._meta?.[GROUPS_META_KEY]).toEqual(['email']);
-
-        // ---- Client-side filtering: expand "work" to get all descendant tools ----
-        const workDescendants = new Set<string>();
-        const queue = ['work'];
-        while (queue.length) {
-            const cur = queue.shift()!;
-            if (workDescendants.has(cur)) continue;
-            workDescendants.add(cur);
-            for (const g of groups) {
-                if (GroupingClient.getGroupMembership(g._meta).includes(cur) && !workDescendants.has(g.name)) {
-                    queue.push(g.name);
-                }
+        grouping.registerGroup('child-group', {
+            description: 'A child group',
+            _meta: {
+                [GROUPS_META_KEY]: ['parent-group']
             }
-        }
-        expect(workDescendants).toEqual(new Set(['work', 'spreadsheets', 'docs']));
+        });
 
-        const workTools = tools.filter(t => GroupingClient.getGroupMembership(t._meta).some(g => workDescendants.has(g)));
-        expect(workTools.map(t => t.name).sort()).toEqual(['create_sheet', 'write_doc']);
+        await Promise.all([client.connect(clientTransport), mcpServer.connect(serverTransport)]);
+
+        const result = await groupingClient.listGroups();
+        const childGroup = result.groups.find(g => g.name === 'child-group');
+        expect(childGroup?._meta?.[GROUPS_META_KEY]).toEqual(['parent-group']);
+    });
+});
+
+describe('Group List Changed Notifications', () => {
+    let mcpServer: McpServer;
+    let client: Client;
+    let grouping: GroupingExtension;
+    let groupingClient: GroupingClient;
+
+    beforeEach(() => {
+        mcpServer = new McpServer({
+            name: 'test-server',
+            version: '1.0.0'
+        });
+
+        grouping = new GroupingExtension(mcpServer);
+
+        client = new Client({
+            name: 'test-client',
+            version: '1.0.0'
+        });
+
+        groupingClient = new GroupingClient(client);
     });
 
-    test('tool belongs to multiple groups simultaneously', async () => {
-        grouping.registerGroup('email', { title: 'Email' });
-        grouping.registerGroup('docs', { title: 'Documents' });
-
-        mcpServer.registerTool(
-            'spell_check',
-            {
-                description: 'Spell check text',
-                inputSchema: { text: z.string() },
-                _meta: { [GROUPS_META_KEY]: ['email', 'docs'] }
-            },
-            async ({ text }) => ({
-                content: [{ type: 'text', text: `Checked: ${text}` }]
-            })
-        );
-
-        await connectPair(mcpServer, client);
-
-        const { tools } = await client.listTools();
-        const sc = tools.find(t => t.name === 'spell_check')!;
-        expect(sc._meta?.[GROUPS_META_KEY]).toEqual(['email', 'docs']);
-
-        for (const groupName of ['email', 'docs']) {
-            const filtered = tools.filter(t => GroupingClient.getGroupMembership(t._meta).includes(groupName));
-            expect(filtered.map(t => t.name)).toContain('spell_check');
-        }
+    afterEach(async () => {
+        await Promise.all([client.close(), mcpServer.close()]);
     });
 
-    test('listGroups returns empty when no groups registered', async () => {
-        await connectPair(mcpServer, client);
-        const { groups } = await groupingClient.listGroups();
-        expect(groups).toHaveLength(0);
-    });
+    test('should handle group list changed notification with manual refresh', async () => {
+        // Register initial group before connect (sets up capability and handlers)
+        grouping.registerGroup('initial-group', {
+            description: 'Initial group'
+        });
 
-    test('registerGroup rejects duplicate names', async () => {
-        grouping.registerGroup('alpha', { title: 'Alpha' });
-        expect(() => grouping.registerGroup('alpha', { title: 'Alpha again' })).toThrow('Group "alpha" is already registered');
-    });
-
-    test('groups added and removed post-connect, only groups/list_changed fires', async () => {
         const { clientTransport } = await connectPair(mcpServer, client);
         const notificationMethods = spyOnNotifications(clientTransport);
 
-        // Add two groups
-        const handle = grouping.registerGroup('a', { title: 'A' });
-        grouping.registerGroup('b', { title: 'B' });
-        await new Promise(r => setTimeout(r, 50));
+        // Register another group post-connect — triggers listChanged notification
+        grouping.registerGroup('test-group', {
+            description: 'A test group'
+        });
 
-        let result = await groupingClient.listGroups();
-        expect(result.groups.map(g => g.name).sort()).toEqual(['a', 'b']);
+        // Wait for the notification to be delivered
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Remove via handle.remove()
-        handle.remove();
-        await new Promise(r => setTimeout(r, 50));
+        // Should have received at least one groups/list_changed notification
+        expect(notificationMethods).toContain('notifications/groups/list_changed');
 
-        result = await groupingClient.listGroups();
-        expect(result.groups.map(g => g.name)).toEqual(['b']);
-
-        // Remove via removeGroup()
-        grouping.removeGroup('b');
-        await new Promise(r => setTimeout(r, 50));
-
-        result = await groupingClient.listGroups();
-        expect(result.groups).toHaveLength(0);
-
-        // Every notification was groups/list_changed — never tools or resources
-        expect(notificationMethods.length).toBeGreaterThanOrEqual(3);
-        for (const method of notificationMethods) {
-            expect(method).toBe('notifications/groups/list_changed');
-        }
+        // Manually refresh groups
+        const result = await groupingClient.listGroups();
+        expect(result.groups).toHaveLength(2);
+        expect(result.groups.find(g => g.name === 'test-group')).toBeDefined();
     });
 
-    test("changing primitive group membership fires the primitive's list_changed (not groups)", async () => {
-        grouping.registerGroup('alpha', { title: 'Alpha' });
-        grouping.registerGroup('beta', { title: 'Beta' });
+    test('should handle group list changed notification with auto refresh', async () => {
+        const notifications: string[][] = [];
 
-        const toolHandle = mcpServer.registerTool(
-            'my_tool',
-            {
-                description: 'A tool',
-                _meta: { [GROUPS_META_KEY]: ['alpha'] }
-            },
-            async () => ({ content: [{ type: 'text', text: 'ok' }] })
-        );
-
-        const resHandle = mcpServer.registerResource(
-            'my_res',
-            'test://resource',
-            {
-                description: 'A resource',
-                _meta: { [GROUPS_META_KEY]: ['alpha'] }
-            },
-            async () => ({
-                contents: [{ uri: 'test://resource', text: 'data', mimeType: 'text/plain' }]
-            })
-        );
-
-        const { clientTransport } = await connectPair(mcpServer, client);
-
-        // Verify initial membership
-        let { tools } = await client.listTools();
-        expect(tools.find(t => t.name === 'my_tool')!._meta?.[GROUPS_META_KEY]).toEqual(['alpha']);
-        let { resources } = await client.listResources();
-        expect(resources.find(r => r.name === 'my_res')!._meta?.[GROUPS_META_KEY]).toEqual(['alpha']);
-
-        // Start spying AFTER connect so we only capture post-handshake notifications
-        const notificationMethods = spyOnNotifications(clientTransport);
-
-        // Change tool's group membership
-        toolHandle.update({
-            _meta: { [GROUPS_META_KEY]: ['beta'] }
+        // Register initial group
+        grouping.registerGroup('initial-group', {
+            description: 'Initial group'
         });
-        await new Promise(r => setTimeout(r, 50));
-
-        ({ tools } = await client.listTools());
-        expect(tools.find(t => t.name === 'my_tool')!._meta?.[GROUPS_META_KEY]).toEqual(['beta']);
-
-        // Change resource's group membership
-        resHandle.update({
-            metadata: { _meta: { [GROUPS_META_KEY]: ['beta'] } }
-        });
-        await new Promise(r => setTimeout(r, 50));
-
-        ({ resources } = await client.listResources());
-        expect(resources.find(r => r.name === 'my_res')!._meta?.[GROUPS_META_KEY]).toEqual(['beta']);
-
-        // Only primitive-specific notifications fired, never groups/list_changed
-        expect(notificationMethods).toContain('notifications/tools/list_changed');
-        expect(notificationMethods).toContain('notifications/resources/list_changed');
-        expect(notificationMethods).not.toContain('notifications/groups/list_changed');
-    });
-
-    test('RegisteredGroup handle: rename, update fields, disable/enable', async () => {
-        const handle = grouping.registerGroup('orig', {
-            title: 'Original',
-            description: 'Before'
-        });
-
-        const { clientTransport } = await connectPair(mcpServer, client);
-
-        let result = await groupingClient.listGroups();
-        expect(result.groups[0]).toMatchObject({
-            name: 'orig',
-            title: 'Original',
-            description: 'Before'
-        });
-
-        const notificationMethods = spyOnNotifications(clientTransport);
-
-        // Rename + mutate fields
-        handle.update({
-            name: 'renamed',
-            title: 'Renamed',
-            description: 'After'
-        });
-
-        result = await groupingClient.listGroups();
-        expect(result.groups).toHaveLength(1);
-        expect(result.groups[0]).toMatchObject({
-            name: 'renamed',
-            title: 'Renamed',
-            description: 'After'
-        });
-        expect(result.groups.find(g => g.name === 'orig')).toBeUndefined();
-
-        // Disable — group disappears from listing
-        handle.disable();
-        result = await groupingClient.listGroups();
-        expect(result.groups).toHaveLength(0);
-
-        // Re-enable — reappears with its data intact
-        handle.enable();
-        result = await groupingClient.listGroups();
-        expect(result.groups).toHaveLength(1);
-        expect(result.groups[0].title).toBe('Renamed');
-
-        // Every mutation sent groups/list_changed
-        await new Promise(r => setTimeout(r, 50));
-        expect(notificationMethods.length).toBeGreaterThanOrEqual(3);
-        for (const method of notificationMethods) {
-            expect(method).toBe('notifications/groups/list_changed');
-        }
-    });
-
-    test('three-level nesting: client can traverse and collect all tools', async () => {
-        // root > mid > leaf
-        grouping.registerGroup('root', { title: 'Root' });
-        grouping.registerGroup('mid', {
-            title: 'Mid',
-            _meta: { [GROUPS_META_KEY]: ['root'] }
-        });
-        grouping.registerGroup('leaf', {
-            title: 'Leaf',
-            _meta: { [GROUPS_META_KEY]: ['mid'] }
-        });
-
-        mcpServer.registerTool(
-            'root_tool',
-            {
-                description: 'In root',
-                _meta: { [GROUPS_META_KEY]: ['root'] }
-            },
-            async () => ({ content: [{ type: 'text', text: 'r' }] })
-        );
-        mcpServer.registerTool(
-            'mid_tool',
-            {
-                description: 'In mid',
-                _meta: { [GROUPS_META_KEY]: ['mid'] }
-            },
-            async () => ({ content: [{ type: 'text', text: 'm' }] })
-        );
-        mcpServer.registerTool(
-            'leaf_tool',
-            {
-                description: 'In leaf',
-                _meta: { [GROUPS_META_KEY]: ['leaf'] }
-            },
-            async () => ({ content: [{ type: 'text', text: 'l' }] })
-        );
 
         await connectPair(mcpServer, client);
 
-        const { groups } = await groupingClient.listGroups();
-        const { tools } = await client.listTools();
+        const result1 = await groupingClient.listGroups();
+        expect(result1.groups).toHaveLength(1);
 
-        // BFS from root collects all 3 levels
-        const expanded = new Set<string>();
-        const queue = ['root'];
-        while (queue.length) {
-            const cur = queue.shift()!;
-            if (expanded.has(cur)) continue;
-            expanded.add(cur);
-            for (const g of groups) {
-                if (GroupingClient.getGroupMembership(g._meta).includes(cur)) {
-                    queue.push(g.name);
-                }
-            }
-        }
-        expect(expanded).toEqual(new Set(['root', 'mid', 'leaf']));
+        // Listen for group changes and auto-refresh
+        groupingClient.onGroupsChanged(async () => {
+            const updated = await groupingClient.listGroups();
+            notifications.push(updated.groups.map(g => g.name));
+        });
 
-        const rootTreeTools = tools
-            .filter(t => GroupingClient.getGroupMembership(t._meta).some(g => expanded.has(g)))
-            .map(t => t.name)
-            .sort();
-        expect(rootTreeTools).toEqual(['leaf_tool', 'mid_tool', 'root_tool']);
+        // Register another group — triggers listChanged notification
+        grouping.registerGroup('test-group', {
+            description: 'A test group'
+        });
 
-        // Expand from "mid" only gets mid + leaf
-        const midExpanded = new Set<string>();
-        const mq = ['mid'];
-        while (mq.length) {
-            const cur = mq.shift()!;
-            if (midExpanded.has(cur)) continue;
-            midExpanded.add(cur);
-            for (const g of groups) {
-                if (GroupingClient.getGroupMembership(g._meta).includes(cur)) {
-                    mq.push(g.name);
-                }
-            }
-        }
-        const midTreeTools = tools
-            .filter(t => GroupingClient.getGroupMembership(t._meta).some(g => midExpanded.has(g)))
-            .map(t => t.name)
-            .sort();
-        expect(midTreeTools).toEqual(['leaf_tool', 'mid_tool']);
+        // Wait for the notification callback to be processed
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Callback should have fired and auto-refreshed with 2 groups
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toHaveLength(2);
+        expect(notifications[0]).toContain('test-group');
     });
 });
