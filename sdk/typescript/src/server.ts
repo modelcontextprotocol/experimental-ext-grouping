@@ -39,8 +39,7 @@ export interface RegisteredGroup {
 /**
  * Extension that adds group support to an McpServer.
  *
- * Registers `groups/list` request handler and capability via the `experimental`
- * path (until the SDK ships the `extensions` field).
+ * Registers `groups/list` request handler and capability under `extensions`.
  */
 export class GroupingExtension {
     private _groups = new Map<string, RegisteredGroup>();
@@ -56,7 +55,7 @@ export class GroupingExtension {
         if (this._handlersInitialized) return;
 
         this._mcpServer.server.registerCapabilities({
-            experimental: {
+            extensions: {
                 [GROUPING_EXTENSION_ID]: { listChanged: true }
             }
         });

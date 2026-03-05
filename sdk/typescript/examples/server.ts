@@ -353,7 +353,117 @@ mcpServer.registerResource(
     }
 );
 
-// TODO: add prompts once SDK registerPrompt supports _meta passthrough
+// ===== Prompts =====
+
+mcpServer.registerPrompt(
+    'email_thank_contributor',
+    {
+        description: 'Compose an email thanking someone for their recent contributions.',
+        argsSchema: {
+            name: z.string().describe('Recipient name')
+        },
+        ...metaForGroup('email')
+    },
+    async ({ name }) => ({
+        messages: [
+            {
+                role: 'user' as const,
+                content: {
+                    type: 'text' as const,
+                    text: `Compose an email thanking ${name} for their recent contributions. Keep it warm, specific, and concise.`
+                }
+            }
+        ]
+    })
+);
+
+mcpServer.registerPrompt(
+    'calendar_meeting_agenda',
+    {
+        description: 'Draft a short agenda for an upcoming meeting.',
+        argsSchema: {
+            topic: z.string().describe('Meeting topic')
+        },
+        ...metaForGroup('calendar')
+    },
+    async ({ topic }) => ({
+        messages: [
+            {
+                role: 'user' as const,
+                content: {
+                    type: 'text' as const,
+                    text: `Draft a short meeting agenda for a meeting about: ${topic}. Include goals, timeboxes, and expected outcomes.`
+                }
+            }
+        ]
+    })
+);
+
+mcpServer.registerPrompt(
+    'spreadsheets_quick_analysis',
+    {
+        description: 'Suggest a simple spreadsheet layout for tracking a metric.',
+        argsSchema: {
+            metric: z.string().describe('The metric to track')
+        },
+        ...metaForGroup('spreadsheets')
+    },
+    async ({ metric }) => ({
+        messages: [
+            {
+                role: 'user' as const,
+                content: {
+                    type: 'text' as const,
+                    text: `Suggest a simple spreadsheet layout for tracking: ${metric}. Include column headers and a brief note on how to use it.`
+                }
+            }
+        ]
+    })
+);
+
+mcpServer.registerPrompt(
+    'documents_write_outline',
+    {
+        description: 'Create an outline for a document on a topic.',
+        argsSchema: {
+            topic: z.string().describe('Document topic')
+        },
+        ...metaForGroup('documents')
+    },
+    async ({ topic }) => ({
+        messages: [
+            {
+                role: 'user' as const,
+                content: {
+                    type: 'text' as const,
+                    text: `Create a clear outline for a document about: ${topic}. Use headings and a short description under each heading.`
+                }
+            }
+        ]
+    })
+);
+
+mcpServer.registerPrompt(
+    'todos_plan_day',
+    {
+        description: 'Turn a list of tasks into a simple day plan.',
+        argsSchema: {
+            tasks: z.array(z.string()).describe('Tasks to plan')
+        },
+        ...metaForGroup('todos')
+    },
+    async ({ tasks }) => ({
+        messages: [
+            {
+                role: 'user' as const,
+                content: {
+                    type: 'text' as const,
+                    text: `Create a simple plan for the day from these tasks:\n- ${tasks.join('\n- ')}\n\nPrioritize and group similar tasks.`
+                }
+            }
+        ]
+    })
+);
 
 // --- Start server ---
 async function main() {

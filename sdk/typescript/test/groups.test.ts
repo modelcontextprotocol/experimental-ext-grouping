@@ -113,7 +113,21 @@ describe('Server Groups', () => {
             content: [{ type: 'text', text: 'hi' }]
         }));
 
-        // TODO: add prompt grouping once SDK registerPrompt supports _meta passthrough
+        // Add a prompt to the same group
+        mcpServer.registerPrompt(
+            'prompt1',
+            {
+                description: 'Test prompt 1',
+                _meta: {
+                    [GROUPS_META_KEY]: ['mixed-group']
+                }
+            },
+            async () => ({ messages: [] })
+        );
+
+        mcpServer.registerPrompt('prompt-no-group', { description: 'Prompt with no group' }, async () => ({
+            messages: []
+        }));
 
         // Add a resource to the same group
         mcpServer.registerResource(
@@ -137,8 +151,6 @@ describe('Server Groups', () => {
             })
         );
 
-        // TODO: add task-tool grouping once SDK experimental.tasks is available
-
         await Promise.all([client.connect(clientTransport), mcpServer.connect(serverTransport)]);
 
         // Verify tools
@@ -160,6 +172,15 @@ describe('Server Groups', () => {
         expect(resource1?._meta?.[GROUPS_META_KEY]).toEqual(['mixed-group']);
         if (resourceNoGroup?._meta) {
             expect(resourceNoGroup._meta).not.toHaveProperty(GROUPS_META_KEY);
+        }
+
+        // Verify prompts
+        const promptsResult = await client.listPrompts();
+        const prompt1 = promptsResult.prompts.find(p => p.name === 'prompt1');
+        const promptNoGroup = promptsResult.prompts.find(p => p.name === 'prompt-no-group');
+        expect(prompt1?._meta?.[GROUPS_META_KEY]).toEqual(['mixed-group']);
+        if (promptNoGroup?._meta) {
+            expect(promptNoGroup._meta).not.toHaveProperty(GROUPS_META_KEY);
         }
     });
 

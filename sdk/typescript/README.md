@@ -3,7 +3,7 @@
 Organize MCP tools, resources, and other primitives into named groups. This package implements the [Grouping Extension specification](../../specification/draft/grouping.mdx) as an add-on for the
 [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk).
 
-> **Status:** Experimental. The capability is registered under `experimental["io.modelcontextprotocol/grouping"]` until the SDK ships the `extensions` field on `ServerCapabilities`.
+> **Status:** Experimental. This is an Interest Group exploration, not an official extension.
 
 ## Install
 
@@ -197,15 +197,13 @@ The extension registers its capability at:
 
 ```json
 {
-    "experimental": {
+    "extensions": {
         "io.modelcontextprotocol/grouping": {
             "listChanged": true
         }
     }
 }
 ```
-
-When the MCP SDK adds the `extensions` field to `ServerCapabilities`, this will move to `capabilities.extensions["io.modelcontextprotocol/grouping"]`.
 
 ## Running the examples
 
