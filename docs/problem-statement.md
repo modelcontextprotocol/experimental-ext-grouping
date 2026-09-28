@@ -101,15 +101,21 @@ definitions only when needed.
 
 ## Why something needs to happen in MCP
 
-The server knows its capability catalog and semantics. The client knows the
-user's task, the model's limits, local policy, and its context-management
-strategy. Neither side has enough information to implement dependable discovery
-alone.
+Progressive discovery commonly builds on information supplied by the providers
+of the primitives being discovered. CLI authors organize commands and provide
+help text; Skill authors supply descriptions, instructions, and references that
+consumers load progressively. The consumer controls discovery, but the provider
+supplies information about what is available and how to use it.
 
-MCP is the shared layer where the server can provide authoritative discovery
-signals and the client can decide how to apply them. Without a protocol-level
-contract, each server-client pair must recreate that integration, and behavior
-will continue to vary across clients.
+MCP servers already provide primitive names, descriptions, and schemas. Clients
+can use these definitions to implement discovery, but relationships, entrypoints,
+and task-oriented guidance may not be explicit in individual definitions.
+Servers can supply that broader context, while clients contribute knowledge of
+the user's task, model limits, and local policy.
+
+A shared discovery contract would let servers communicate this information
+consistently across clients, while leaving clients free to choose how they
+search, select, and present primitives.
 
 MCP should therefore enable an optional progressive-discovery contract with
 these properties:
