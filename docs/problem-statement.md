@@ -1,5 +1,8 @@
 # Progressive Discovery Problem Statement
 
+This statement considers progressive discovery of tools, prompts, and resources.
+Tools provide the primary motivating examples and quantitative evidence.
+
 ## Large tool catalogs impose measurable costs
 
 An eager tool catalog places every active tool's name, description, and schema
@@ -9,10 +12,11 @@ three costs:
 - **Cost:** Complete tool definitions consume input tokens on every model
   request where they are active.  
 - **Accuracy:** Tool selection becomes harder as the number of choices and the
-  overlap between them increase. Microsoft Research reports performance losses
-  of up to 85% for some models in large tool spaces. Its survey of 1,470
-  runnable MCP servers found one server with 256 tools and ten more with over
-  100
+  overlap between them increase. The [LongFuncEval
+  benchmark](https://arxiv.org/abs/2505.10570v1) reports performance degradation of
+  up to 85% for some evaluated models as tool-catalog context length and the
+  position of the relevant tool vary. Microsoft Research's survey of 1,470
+  runnable MCP servers found one server with 256 tools and ten more with over 100
   ([survey](https://www.microsoft.com/en-us/research/blog/tool-space-interference-in-the-mcp-era-designing-for-agent-compatibility-at-scale/)).
   The peer-reviewed [MetaTool
   benchmark](https://proceedings.iclr.cc/paper_files/paper/2024/hash/bc12914d66b41b6bfc2d3a5decdb498b-Abstract-Conference.html)
