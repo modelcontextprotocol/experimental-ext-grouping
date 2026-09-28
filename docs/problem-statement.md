@@ -87,17 +87,17 @@ execution strategies.
 MCP does not standardize an equivalent relationship between a narrow entrypoint
 and later expansion into relevant primitive definitions.
 
-## Relative benchmarks of MCP Vs CLIs actively harm MCP client support
+## Catalog costs can limit the capabilities clients expose
 
-Agent authors frequently use coding based evaluation tasks to compare CLI and
-MCP equivalents where they exist, and the lack of support for effective
-progressive discovery for MCP from the whole ecosystem (model providers, harness
-builders and MCP itself), has reduced the ability to counter that narrative
-effectively. This has systematically led to MCP features being de-prioritised,
-and in some specific cases has led to partial MCP surface being exposed ex.
-GitHub Copilot CLI only natively exposes a few of GitHub MCP Server’s tools \-
-ones with the least overlap with the CLI \- and these decisions are made
-primarily by comparing benchmark results
+Catalog size can influence which capabilities clients expose by default. For
+example, GitHub Copilot CLI [reduced its default GitHub MCP tool set to conserve
+context-window space](https://github.com/github/copilot-cli/blob/main/changelog.md#00350---2025-10-23),
+noting that the model could use the GitHub CLI for omitted tools when available.
+
+This illustrates a practical consequence of eager loading: clients may restrict
+the default capability surface to manage context costs. Progressive discovery
+could allow clients to expose broader catalogs while loading detailed
+definitions only when needed.
 
 ## Why something needs to happen in MCP
 
