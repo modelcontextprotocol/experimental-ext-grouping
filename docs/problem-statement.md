@@ -135,9 +135,7 @@ these properties:
    client implementations \- the emergence of tool search, client initiated lazy
    loading of tools, MCP CLIs and programmatic tool calling/code mode all
    indicate that clients are still innovating in this space, and this effort
-   should be an enabler of this. Ex. progressive discovery metadata could be
-   used to make a graph graph from mcp primitives for an MCP CLI with nested
-   subcommands \- or provide metadata for tool search.
+   should be an enabler of this.
 
 The success criterion is simple: a user can install a broad MCP server and leave
 it connected. Adding capabilities does not proportionally increase the agent's
