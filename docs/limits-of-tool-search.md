@@ -1,5 +1,13 @@
 # The Limits of Tool Search
 
+Flat tool search is a useful baseline for progressive discovery. Provider-authored
+groups can offer better starting points: Skills bundle instructions and resources
+around tasks, while CLIs organize commands into groups and subcommands. Clients
+can discover or search these groups before expanding individual primitives.
+
+This document examines where flat tool search falls short and how that structure
+can improve discovery, while retaining tradeoffs in tool activation and caching.
+
 # How native tool calling works
 
 In the early days of LLM applications, tools were a very manual process built on
