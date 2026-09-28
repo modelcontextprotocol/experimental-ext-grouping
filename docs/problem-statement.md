@@ -120,7 +120,8 @@ these properties:
    entrypoints, and task-oriented guidance without prescribing the client's
    search or prompt implementation.  
 4. **Dynamic correctness:** Discovery can reflect changes in authorization,
-   configuration, and the capability catalog.
+   configuration, and the capability catalog. Any new discovery surface should
+   preserve existing authorization and cache-scope semantics.
 5. **Prompt-cache efficiency:** Progressive discovery should allow clients to
    preserve stable prompt prefixes where possible, while incorporating newly
    discovered capabilities and updated definitions.
