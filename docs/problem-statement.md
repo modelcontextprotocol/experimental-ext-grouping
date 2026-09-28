@@ -148,6 +148,11 @@ it connected. Adding capabilities does not proportionally increase the agent's
 always-loaded context, and using a new capability does not require the user to
 know its server, toolset, or exact name in advance.
 
+Approaches should be evaluated on initial context size, total token usage,
+end-to-end latency, and task completion across representative catalog sizes and
+workflows. Evaluation should account for discovery overhead and failures to find
+relevant primitives.
+
 ## Non-goals
 
 - **Disambiguation of primitive naming:** For example, two servers may both
