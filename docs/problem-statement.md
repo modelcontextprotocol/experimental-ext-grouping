@@ -119,9 +119,12 @@ these properties:
 3. **Server-provided semantics:** Servers can communicate relationships,
    entrypoints, and task-oriented guidance without prescribing the client's
    search or prompt implementation.  
-4. **Dynamic correctness:** Discovery can reflect authorization, configuration,
-   and catalog changes while remaining cacheable.  
-5. **Execution method agnostic:** MCP has never stipulated that tools be
+4. **Dynamic correctness:** Discovery can reflect changes in authorization,
+   configuration, and the capability catalog.
+5. **Prompt-cache efficiency:** Progressive discovery should allow clients to
+   preserve stable prompt prefixes where possible, while incorporating newly
+   discovered capabilities and updated definitions.
+6. **Execution method agnostic:** MCP has never stipulated that tools be
    directly submitted to models, and the protocol should remain agnostic to
    client implementations \- the emergence of tool search, client initiated lazy
    loading of tools, MCP CLIs and programmatic tool calling/code mode all
