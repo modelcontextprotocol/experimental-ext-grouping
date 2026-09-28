@@ -59,7 +59,7 @@ example, a developer could install one Google Cloud MCP server, leave it
 connected, and retain access to the platform without placing the entire platform
 catalog in model context.
 
-## CLIs and Skills avoid the same penalty
+## CLIs and Skills illustrate progressive discovery
 
 CLIs and Skills separate the small entrypoint required for discovery from the
 larger body of information required for execution:
@@ -78,6 +78,11 @@ Skill's name and description, load the full `SKILL.md` when it is activated, and
 load supporting files during execution ([Agent Skills
 overview](https://agentskills.io/home)). Adding many Skills therefore adds a
 small discovery index rather than many full instruction sets.
+
+These examples illustrate how discovery information can be loaded incrementally.
+Execution interfaces, argument validation, and authorization are separate
+considerations; progressive discovery should accommodate different client
+execution strategies.
 
 MCP does not standardize an equivalent relationship between a narrow entrypoint
 and later expansion into relevant primitive definitions.
