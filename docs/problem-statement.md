@@ -134,3 +134,11 @@ The success criterion is simple: a user can install a broad MCP server and leave
 it connected. Adding capabilities does not proportionally increase the agent's
 always-loaded context, and using a new capability does not require the user to
 know its server, toolset, or exact name in advance.
+
+## Non-goals
+
+- **Disambiguation of primitive naming:** For example, two servers may both
+  expose a tool named `search`, and a client may distinguish them as
+  `github_search` and `slack_search`. Defining naming conventions or how
+  server-authored guidance refers to those renamed tools is outside the scope
+  of this effort.
