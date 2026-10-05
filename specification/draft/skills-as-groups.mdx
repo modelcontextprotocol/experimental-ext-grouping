@@ -1,0 +1,104 @@
+# SEP: Skills as Groups
+
+## 1. Capability Declaration
+
+**No new capability:** A server signals support by:
+
+- Declaring SEP-2640's `extensions.io.modelcontextprotocol/skills` capability during initialization, and
+- Including one or more of the reserved `io.modelcontextprotocol/*` keys (defined in §2) in the frontmatter of one or more skills.
+
+```json
+{
+  "capabilities": {
+    "extensions": {
+      "io.modelcontextprotocol/skills": {}
+    }
+  }
+}
+```
+
+## 2. Skill Frontmatter Schema
+
+A skill MAY declare its MCP-primitive dependencies via the following reserved keys under the agent-skills `metadata` block.
+
+| Key                                 | Value format        | Resolves against                                                                                       |
+| ----------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `io.modelcontextprotocol/tools`     | Tool name           | `Tool.name` from `tools/list` on the server hosting the skill                                          |
+| `io.modelcontextprotocol/prompts`   | Prompt name         | `Prompt.name` from `prompts/list`                                                                      |
+| `io.modelcontextprotocol/resources` | URI or URI Template | `Resource.uri` from `resources/list` or `ResourceTemplate.uriTemplate` from `resources/templates/list` |
+
+**Question:** Should we support hierarchical nesting? Support `io.modelcontextprotocol/skills` as a separate category?
+
+## 3. Notifications
+
+**No new notifications:** Every dynamism scenario, e.g., skill added, skill removed, skill frontmatter modified, primitive added, primitive removed, falls naturally onto existing MCP notifications:
+
+- Skill lifecycle events emit `notifications/resources/list_changed` and `notifications/resources/updated` because skills are MCP resources per SEP-2640.
+- Primitive lifecycle events emit the existing `notifications/tools/list_changed`, `notifications/prompts/list_changed`, and `notifications/resources/list_changed`.
+
+## 4. Server Obligations
+
+Servers exposing skills with `io.modelcontextprotocol/*` metadata are bound by the following normative rules:
+
+- Servers **SHOULD** keep skill frontmatter consistent with currently-exposed primitives. When a tool, prompt, or resource is removed from the server's listings, the server SHOULD update or remove corresponding frontmatter tokens in any skills it serves and emit the appropriate `notifications/resources/updated` for affected `skill://<path>/SKILL.md` URIs (per existing subscription semantics).
+- Servers **MUST NOT** use frontmatter membership as an access-control mechanism. Authorization remains the server's responsibility on each primitive call, regardless of which skill (if any) declared the primitive.
+
+## 5. Client Behavior
+
+Clients are free to use the metadata however suits their UX and use case:
+
+- Filter `tools/list`, `prompts/list`, and `resources/list` results before presenting them to an LLM, based on which skills are "active" in some client-defined sense (progressive disclosure).
+- Surface skills as user-selectable in a UI, where selection determines the primitive set.
+- Provide an agent-callable meta-tool (for example, `activate_skill(name_or_uri)`) that lets the model itself manage which skills are in the active set.
+- Ignore the metadata entirely.
+
+The baseline pre-activation primitive set, the activation lifecycle, the algorithm for combining multiple active skills' primitive lists, and the handling of cross-server resolution are all client concerns and are not mandated.
+
+## 6. Examples
+
+**Example 1 — Basic case:**
+
+```yaml
+---
+name: github-pr-review
+description: Review pull requests on GitHub. Use when reviewing PR code, leaving comments, or approving changes.
+metadata:
+  io.modelcontextprotocol/tools: "get_pr list_comments post_comment approve_pr"
+  io.modelcontextprotocol/prompts: "pr-review-template"
+  io.modelcontextprotocol/resources: "github://pr/{number} github://pr/{number}/diff"
+---
+```
+
+**Example 2 — Multi-skill membership (`spell_check` appears in two skills):** A primitive (tool, prompt, resource) **MAY** appear in any number of skills' declared lists. The relationship is many-to-many.
+
+```yaml
+# skills/compose-email/SKILL.md
+---
+name: compose-email
+description: Compose an email with proper tone and grammar.
+metadata:
+  io.modelcontextprotocol/tools: "draft_email spell_check send_email"
+---
+```
+
+```yaml
+# skills/compose-document/SKILL.md
+---
+name: compose-document
+description: Compose a long-form document.
+metadata:
+  io.modelcontextprotocol/tools: "draft_section spell_check format_doc export_pdf"
+---
+```
+
+Here `spell_check` is declared by both skills. A host that activates either skill sees `spell_check` available; activating both adds it once.
+
+**Client Flow:** For illustration only, one reasonable client flow is:
+
+1. On initialize, observe `extensions.io.modelcontextprotocol/skills` in `ServerCapabilities.extensions`.
+2. List `skill://` resources (via `resources/list` filtering by URI scheme, or via SEP-2640's optional `skill://index.json`).
+3. For each skill, read the `SKILL.md` resource and parse its frontmatter.
+4. Build a map from each skill to its declared primitives by resolving the `io.modelcontextprotocol/*` tokens against the server's `tools/list`, `prompts/list`, `resources/list`, and `resources/templates/list` results.
+5. Track "active skills" as client-local state; recompute the union of declared primitives when the set changes.
+6. Filter LLM-visible primitive lists to the computed set (plus any always-on baseline the client chooses to maintain).
+7. Subscribe via `resources/subscribe` to the relevant `skill://` URIs to track changes.
